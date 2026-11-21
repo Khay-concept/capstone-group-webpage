@@ -1,25 +1,33 @@
+name: Deploy to EC2
+
+on:
+  workflow_run:
+    workflows: ["Flask CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: app
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: "app/requirements.txt"
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /var/www/capstone-group-webpage
+            git pull origin main
+            source venv/bin/activate || true
+            pip install -r app/requirements.txt || true
+            sudo systemctl restart flask || true
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
-
-      - name: Run tests
-        run: pytest
+      - name: Verify health endpoint
+        run: curl --fail --retry 5 --retry-delay 3 http://${{ secrets.SERVER_HOST }}/health || exit 1
