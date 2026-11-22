@@ -31,3 +31,5 @@ jobs:
 
       - name: Verify health endpoint
         run: curl --fail --retry 5 --retry-delay 3 http://${{ secrets.SERVER_HOST }}/health || exit 1
+
+        
